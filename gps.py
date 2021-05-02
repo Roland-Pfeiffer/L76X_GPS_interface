@@ -18,40 +18,6 @@ BAUD_RATE = 9600
 logging.basicConfig(level=logging.DEBUG, format='[%(levelname)s]\t%(message)s')
 logging.disable()
 
-class RawPackage():
-    """Not sure if this class is very useful"""
-    def __init__(self, raw_pkg):
-        self.GNRMC = []
-        self.GNVTG = []
-        self.GNGGA = []
-        self.GPGSA = []
-        self.BDGSA = []
-        self.GPGSV = []
-        self.GNRMC = []
-        self.GNRMC = []
-
-        for raw_line in raw_pkg:
-            line_decoded = decode_line(raw_line)
-            if line_decoded.startswith('$' + 'GNRMC'):
-                self.GNRMC.append(raw_line)
-            elif line_decoded.startswith('$' + 'GNVTG'):
-                self.GNVTG.append(raw_line)
-            elif line_decoded.startswith('$' + 'GNGGA'):
-                self.GNGGA.append(raw_line)
-            elif line_decoded.startswith('$' + 'GPGSA'):
-                self.GPGSA.append(raw_line)
-            elif line_decoded.startswith('$' + 'BDGSA'):
-                self.BDGSA.append(raw_line)
-            elif line_decoded.startswith('$' + 'GPGSV'):
-                self.GPGSV.append(raw_line)
-            elif line_decoded.startswith('$' + 'BDGSV'):
-                self.BDGSV.append(raw_line)
-            elif line_decoded.startswith('$' + 'GNGLL'):
-                self.GNGLL.append(raw_line)
-
-        def get_line(id: str):
-            return self.id
-
 
 class Waypoint(object):
     def __init__(self,
