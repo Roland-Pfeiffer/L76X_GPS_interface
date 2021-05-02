@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 
 import copy
+from datetime import datetime, timedelta
 import glob
 import logging
 import os
+import pandas as pd
 import stat
 import time
+
 
 import gpxpy
 import serial
@@ -14,6 +17,7 @@ import serial
 # ToDo: decode each byte literal only once, and have the helper functions use the decoded strings as input.
 # ToDo: add a variable or a parameter to both run via UART and as a Pi HAT
 # ToDo: add a "local" timestamp based on the coordinates.
+# ToDo: create a function to handle the timestamp
 # ToDo: Put failsafes everywhere where values are empty when package is invalid
 
 
@@ -74,6 +78,7 @@ def get_raw_package(serial_port=DEFAULT_SERIAL_PORT, baud_rate=BAUD_RATE, stop_b
         with serial.Serial(serial_port, baudrate=baud_rate, timeout=1, stopbits=stop_bits) as ser:
             # Continuously read:
             raw_line = ser.readline()
+            # if not raw_line.startswith("b'"): continue  # Failed attempt to avoid invalid starting byte
             decoded_line = decode_line(raw_line)
             # Find start of a new package
             if decoded_line.startswith('$GNRMC'):
@@ -102,6 +107,11 @@ def get_line_elements(decoded_line):
     return decoded_line.split(',')
 
 
+def utc_to_cet(utc_timestamp, time_format="%Y-%m-%d %H:%M:%S"):
+    cet_timestamp = datetime.strptime(utc_timestamp, time_format) + timedelta(hours=2)
+    return datetime.strftime(cet_timestamp, time_format)
+
+
 def pkg_is_valid(raw_pkg):
     """Returns True when a package is valid, and False when it's invalid."""
     # The third entry in comma-separated GNRMC package says "V" for invalid package, and "A" for a valid one.
@@ -119,19 +129,20 @@ def pkg_is_valid(raw_pkg):
 
 
 def wait_for_satellites():
+    time.sleep(3)  # Hopefully this will avoid the 'invalid start byte' UnicodeDecodeError in decode_line
     counter = 1
     while True:
-        if counter == 10:
-            counter = 0
+        if counter == 4:  # Reset animated dots after 3 dots.
+            counter = 1
 
-        msg = '\rWaiting for satellites' + '.' * counter
+        msg = '\rWaiting for satellites' + '.' * counter  # animate dots
         print(msg.ljust(40), end='')
         pkg = get_raw_package()
         if pkg_is_valid(pkg):
             print('\nSatellites found.')
             break
 
-        counter += 1
+        counter += 1  # animated dots get longer
 
 
 def extract_lat_long(decoded_line):
@@ -244,13 +255,17 @@ def read_to_csv(location='/home/*/'):
 
     # Create filename
     now = time.strftime('%Y-%m-%d_%H%M%S', time.gmtime())
-    fdir = glob.glob(location)
-    fname = fdir[0] + 'GPS_' + now + '.csv'
+
+    # Pick the first user folder that matches the description in "location" (e.g. /home/*/).
+    fdir = glob.glob(location)                  # returns a list of the folders and files meeting that criterium
+    fname = fdir[0] + 'GPS_' + now + '.csv'     # Pick the first one and create a path based on it
+
     # Write header
     with open(fname, 'w') as f:
-        os.chmod(fname, stat.S_IRWXO)  # Set file to be accessible to all, since the main program needs to be in
-        f.write('time_utc,latitude_deg,longitude_deg,altitude_m\n')
+        f.write('timestamp_utc,latitude_deg,longitude_deg,altitude_m\n')
         logging.debug(f'Written header to {fname}')
+    os.chmod(fname, stat.S_IRWXO)  # Set file to be accessible to all, since the main program needs to be in
+
     # Add lines
     counter = 0
     while True:
@@ -259,11 +274,32 @@ def read_to_csv(location='/home/*/'):
         with open(fname, 'a') as f:
             f.write(line)
             print(f'Written waypoint {counter}')
+
+        os.chmod(fname, stat.S_IRWXO)  # Set file to be accessible to all, since the main program needs to be in
         counter += 1
 
 
-if __name__ == '__main__':
-    wait_for_satellites()
-    wp1 = get_waypoint()
-    wp1.show_waypoint()
-    read_to_csv()
+def add_cet_timestamp_to_csv(fpath):
+    # Load file
+    try:
+        with open(fpath) as f:
+            data = pd.read_csv(fpath)
+    except FileNotFoundError:
+        print(f'File not found: {fpath}')
+    else:
+        assert 'timestamp_cet' not in data.columns, 'A CET timestamp column already exists in the file.'
+        data.dropna(inplace=True)
+
+        # Get the new times
+        new_times = []
+        for old_time in data['timestamp_utc']:
+            new_time = utc_to_cet(old_time)
+            new_times.append(new_time)
+            logging.debug((old_time, new_time))
+
+        # Add the new CET timestamp column to the data
+        data['timestamp_cet'] = new_times
+
+        # Overwrite file
+        data.to_csv(fpath, index=False)
+        print('Done.')
