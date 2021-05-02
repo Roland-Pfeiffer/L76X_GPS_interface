@@ -1,3 +1,4 @@
 #!/usr/bin/env python3
 import gps
-gps.monitor()
+
+gps.monitor_gps()
