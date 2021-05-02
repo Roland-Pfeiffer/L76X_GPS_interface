@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
 from datetime import datetime
+import glob
 
-print(datetime.strftime(datetime.now()))
+print()

@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 
 import copy
+import glob
 import logging
+import os
+import stat
 import time
 
 import gpxpy
 import serial
 
 
-# ToDo: add a function that loops and waits until the packages are valid.
 # ToDo: decode each byte literal only once, and have the helper functions use the decoded strings as input.
 # ToDo: add a variable or a parameter to both run via UART and as a Pi HAT
+# ToDo: add a "local" timestamp based on the coordinates.
+# ToDo: Put failsafes everywhere where values are empty when package is invalid
 
 
 DEFAULT_SERIAL_PORT = '/dev/ttyUSB0'
@@ -28,7 +32,7 @@ class Waypoint(object):
                  raw_data=None,
                  satellite_count: int = None,
                  speed_kmh: float = None,
-                 timestamp_utc=None,
+                 timestamp_utc_string=None,
                  valid_waypoint: bool = None,
                  ):
         self.altitude_m = altitude_m
@@ -38,11 +42,11 @@ class Waypoint(object):
         self.raw_pkg = raw_data
         self.satellite_count = satellite_count
         self.speed_kmh = speed_kmh
-        self.timestamp_utc = timestamp_utc
+        self.timestamp_utc_string = timestamp_utc_string
         self.valid_waypoint = valid_waypoint
 
     def show_waypoint(self, buffer=17):
-        print('Timestamp (UTC):'.ljust(buffer) + time.strftime('%Y-%m-%d %H:%M:%S', self.timestamp_utc))
+        print('Timestamp (UTC):'.ljust(buffer) + self.timestamp_utc_string)
         print('Valid point:'.ljust(buffer) + str(self.valid_waypoint))
         print('Latitude:'.ljust(buffer) + str(self.latitude))
         print('Longitude:'.ljust(buffer) + str(self.longitude))
@@ -195,7 +199,8 @@ def get_waypoint():
             date = elements[9]  # ddmmyy
             recording_time_utc = date + ',' + time_utc
             timestamp_datetime = time.strptime(recording_time_utc, "%d%m%y,%H%M%S.%f")
-            last_waypoint.timestamp_utc = timestamp_datetime
+            timestamp_string = time.strftime('%Y-%m-%d %H:%M:%S', timestamp_datetime)
+            last_waypoint.timestamp_utc_string = timestamp_string
 
             # Read lat/long coords, if the waypoint has them
             if last_waypoint.valid_waypoint:
@@ -203,8 +208,8 @@ def get_waypoint():
                 last_waypoint.latitude = latitude
                 last_waypoint.longitude = longitude
             else:
-                last_waypoint.latitude = None
-                last_waypoint.longitude = None
+                last_waypoint.latitude = ''
+                last_waypoint.longitude = ''
 
             heading_deg = float(get_line_elements(decoded_line)[8])
             last_waypoint.heading_deg = heading_deg
@@ -234,13 +239,31 @@ def gps_test():
     print(f'Lat.: {lat} | Long.: {long} | Package healthy: {point.valid_waypoint}')
 
 
-# def create_gpx_file(location, fname=time.strftime(time.now())):
-#     if fname is None:
-#         pass
-#     pass
+def read_to_csv(location='/home/*/'):
+    wait_for_satellites()
+
+    # Create filename
+    now = time.strftime('%Y-%m-%d_%H%M%S', time.gmtime())
+    fdir = glob.glob(location)
+    fname = fdir[0] + 'GPS_' + now + '.csv'
+    # Write header
+    with open(fname, 'w') as f:
+        os.chmod(fname, stat.S_IRWXO)  # Set file to be accessible to all, since the main program needs to be in
+        f.write('time_utc,latitude_deg,longitude_deg,altitude_m\n')
+        logging.debug(f'Written header to {fname}')
+    # Add lines
+    counter = 0
+    while True:
+        wp = get_waypoint()
+        line = f'{wp.timestamp_utc_string},{wp.latitude},{wp.longitude},{wp.altitude_m}\n'
+        with open(fname, 'a') as f:
+            f.write(line)
+            print(f'Written waypoint {counter}')
+        counter += 1
 
 
 if __name__ == '__main__':
     wait_for_satellites()
     wp1 = get_waypoint()
     wp1.show_waypoint()
+    read_to_csv()
