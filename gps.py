@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 import copy
-from datetime import datetime
 import logging
+import time
 
 import gpxpy
 import serial
@@ -28,7 +28,7 @@ class Waypoint(object):
                  raw_data=None,
                  satellite_count: int = None,
                  speed_kmh: float = None,
-                 timestamp_utc: datetime = None,
+                 timestamp_utc=None,
                  valid_waypoint: bool = None,
                  ):
         self.altitude_m = altitude_m
@@ -42,7 +42,7 @@ class Waypoint(object):
         self.valid_waypoint = valid_waypoint
 
     def show_waypoint(self, buffer=17):
-        print('Timestamp (UTC):'.ljust(buffer) + datetime.strftime(self.timestamp_utc, '%Y-%m-%d %H:%M:%S'))
+        print('Timestamp (UTC):'.ljust(buffer) + time.strftime('%Y-%m-%d %H:%M:%S', self.timestamp_utc))
         print('Valid point:'.ljust(buffer) + str(self.valid_waypoint))
         print('Latitude:'.ljust(buffer) + str(self.latitude))
         print('Longitude:'.ljust(buffer) + str(self.longitude))
@@ -194,7 +194,7 @@ def get_waypoint():
             time_utc = elements[1]  # hhmmss.sss
             date = elements[9]  # ddmmyy
             recording_time_utc = date + ',' + time_utc
-            timestamp_datetime = datetime.strptime(recording_time_utc, "%d%m%y,%H%M%S.%f")
+            timestamp_datetime = time.strptime(recording_time_utc, "%d%m%y,%H%M%S.%f")
             last_waypoint.timestamp_utc = timestamp_datetime
 
             # Read lat/long coords, if the waypoint has them
@@ -234,10 +234,10 @@ def gps_test():
     print(f'Lat.: {lat} | Long.: {long} | Package healthy: {point.valid_waypoint}')
 
 
-def create_gpx_file(location, fname=None):
-    if fname is None:
-        pass
-    pass
+# def create_gpx_file(location, fname=time.strftime(time.now())):
+#     if fname is None:
+#         pass
+#     pass
 
 
 if __name__ == '__main__':
