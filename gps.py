@@ -14,11 +14,14 @@ import gpxpy
 import serial
 
 
-# ToDo: decode each byte literal only once, and have the helper functions use the decoded strings as input.
-# ToDo: add a variable or a parameter to both run via UART and as a Pi HAT
-# ToDo: add a "local" timestamp based on the coordinates.
-# ToDo: create a function to handle the timestamp
-# ToDo: Put failsafes everywhere where values are empty when package is invalid
+# ToDo: - figure out how to make the csv file editable from the get go
+# ToDo: - decode each byte literal only once, and have the helper functions use the decoded strings as input.
+# ToDo: - add a variable or a parameter to both run via UART and as a Pi HAT
+# ToDo: - add a "local" timestamp based on the coordinates. (I have a UTC to CET function for now)
+# ToDo: - create a function to handle the timestamp extraction
+# ToDo: - put failsafes everywhere where values are empty when package is invalid
+# ToDo: - get a custom process name for the logger that runs on startup in the RPi
+# ToDo: - write a test function that checks if the USB port is actually used
 
 
 DEFAULT_SERIAL_PORT = '/dev/ttyUSB0'
@@ -58,12 +61,8 @@ class Waypoint(object):
         print('Satellite #:'.ljust(buffer) + str(self.satellite_count))
 
 
-def set_port(port):
-    if port is not None:
-        return port
-    else:
-        global DEFAULT_SERIAL_PORT
-        return DEFAULT_SERIAL_PORT
+def set_port(port=DEFAULT_SERIAL_PORT):
+    return port
 
 
 def get_raw_package(serial_port=DEFAULT_SERIAL_PORT, baud_rate=BAUD_RATE, stop_bits=1):
@@ -177,8 +176,8 @@ def monitor_gps_raw(serial_port=DEFAULT_SERIAL_PORT):
             print(ser.readline())
 
 
-def monitor_gps(serial_port=DEFAULT_SERIAL_PORT, package_limit: int=None):
-    with serial.Serial(serial_port, baudrate=BAUD_RATE, timeout=1, stopbits=1) as ser:
+def monitor_gps(port=DEFAULT_SERIAL_PORT, package_limit: int=None):
+    with serial.Serial(port, baudrate=BAUD_RATE, timeout=1, stopbits=1) as ser:
         if package_limit:
             counter = 0
         while True:
@@ -250,7 +249,7 @@ def gps_test():
     print(f'Lat.: {lat} | Long.: {long} | Package healthy: {point.valid_waypoint}')
 
 
-def read_to_csv(location='/home/*/'):
+def read_to_csv(location='/home/*', folder=''):
     wait_for_satellites()
 
     # Create filename
@@ -258,13 +257,13 @@ def read_to_csv(location='/home/*/'):
 
     # Pick the first user folder that matches the description in "location" (e.g. /home/*/).
     fdir = glob.glob(location)                  # returns a list of the folders and files meeting that criterium
-    fname = fdir[0] + 'GPS_' + now + '.csv'     # Pick the first one and create a path based on it
-
+    fname = fdir[0] + '/' + folder + '/GPS_' + now + '.csv'     # Pick the first one and create a path based on it
+    print(f'Reading to file: {fname}')
     # Write header
     with open(fname, 'w') as f:
         f.write('timestamp_utc,latitude_deg,longitude_deg,altitude_m\n')
         logging.debug(f'Written header to {fname}')
-    os.chmod(fname, stat.S_IRWXO)  # Set file to be accessible to all, since the main program needs to be in
+    # os.chmod(fname, stat.S_IRWXO)  # Set file to be accessible to all, since the main program needs to be in
 
     # Add lines
     counter = 0
@@ -273,9 +272,9 @@ def read_to_csv(location='/home/*/'):
         line = f'{wp.timestamp_utc_string},{wp.latitude},{wp.longitude},{wp.altitude_m}\n'
         with open(fname, 'a') as f:
             f.write(line)
-            print(f'Written waypoint {counter}')
+        print(f'Written waypoint {counter}')
 
-        os.chmod(fname, stat.S_IRWXO)  # Set file to be accessible to all, since the main program needs to be in
+        # os.chmod(fname, stat.S_IRWXO)  # Set file to be accessible to all, since the main program needs to be in
         counter += 1
 
 
