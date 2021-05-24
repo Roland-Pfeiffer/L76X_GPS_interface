@@ -4,7 +4,7 @@ import copy
 from datetime import datetime, timedelta
 import glob
 import logging
-import os
+import os.path
 import pandas as pd
 import stat
 import time
@@ -106,8 +106,8 @@ def get_line_elements(decoded_line):
     return decoded_line.split(',')
 
 
-def utc_to_cet(utc_timestamp, time_format="%Y-%m-%d %H:%M:%S"):
-    cet_timestamp = datetime.strptime(utc_timestamp, time_format) + timedelta(hours=2)
+def utc_to_cet(utc_timestamp_str, time_format="%Y-%m-%d %H:%M:%S"):
+    cet_timestamp = datetime.strptime(utc_timestamp_str, time_format) + timedelta(hours=2)
     return datetime.strftime(cet_timestamp, time_format)
 
 
@@ -249,32 +249,42 @@ def gps_test():
     print(f'Lat.: {lat} | Long.: {long} | Package healthy: {point.valid_waypoint}')
 
 
-def read_to_csv(location='/home/*', folder=''):
+def read_to_csv(folder='', use_cet=True):
     wait_for_satellites()
 
     # Create filename
     now = time.strftime('%Y-%m-%d_%H%M%S', time.gmtime())
-
-    # Pick the first user folder that matches the description in "location" (e.g. /home/*/).
-    fdir = glob.glob(location)                  # returns a list of the folders and files meeting that criterium
-    fname = fdir[0] + '/' + folder + '/GPS_' + now + '.csv'     # Pick the first one and create a path based on it
+    now = utc_to_cet(now, time_format='%Y-%m-%d_%H%M%S')
+    homedir = os.path.expanduser('~')
+    print(homedir)
+    fname = os.path.join(homedir, folder, 'GPS_' + now + '.csv')
     print(f'Reading to file: {fname}')
     # Write header
     with open(fname, 'w') as f:
-        f.write('timestamp_utc,latitude_deg,longitude_deg,altitude_m\n')
+        if use_cet:
+            f.write('timestamp_cet,latitude_deg,longitude_deg,altitude_m\n')
+        else:
+            f.write('timestamp_utc,latitude_deg,longitude_deg,altitude_m\n')
         logging.debug(f'Written header to {fname}')
-    # os.chmod(fname, stat.S_IRWXO)  # Set file to be accessible to all, since the main program needs to be in
 
     # Add lines
     counter = 0
     while True:
         wp = get_waypoint()
-        line = f'{wp.timestamp_utc_string},{wp.latitude},{wp.longitude},{wp.altitude_m}\n'
+        if use_cet:
+            line = f'{utc_to_cet(wp.timestamp_utc_string)},' \
+                   f'{wp.latitude},' \
+                   f'{wp.longitude},' \
+                   f'{wp.altitude_m}\n'
+        else:
+            line = f'{wp.timestamp_utc_string},' \
+                   f'{wp.latitude},' \
+                   f'{wp.longitude},' \
+                   f'{wp.altitude_m}\n'
+
         with open(fname, 'a') as f:
             f.write(line)
         print(f'Written waypoint {counter}')
-
-        # os.chmod(fname, stat.S_IRWXO)  # Set file to be accessible to all, since the main program needs to be in
         counter += 1
 
 
